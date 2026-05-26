@@ -11,7 +11,7 @@
 
 ## Automations
 
-### Main Cost Tracker (Import + Export)
+### Main Cost Tracker (Import)
 
 ```yaml
 alias: Amber 5-Minute Cost Tracker
@@ -37,56 +37,75 @@ actions:
       seconds: 30
       milliseconds: 0
     continue_on_timeout: true
-
-  # Calculate import cost
   - target:
       entity_id: input_number.amber_last_5min_cost
     data:
       value: >
-        {% set current = states('sensor.house_total_energy') | float(0) %}
-        {% set previous = states('input_number.grid_energy_previous') | float(0) %}
-        {% set energy_kwh = [current - previous, 0] | max %}
-        {% set price = states('sensor.home_general_price') | float(0) %}
-        {{ (energy_kwh * price) | round(4) }}
+        {% set current = states('sensor.house_total_energy') | float(0) %} {%
+        set previous = states('input_number.grid_energy_previous') | float(0) %}
+        {% set energy_kwh = [current - previous, 0] | max %} {% set price =
+        states('sensor.home_general_price') | float(0) %} {{ (energy_kwh *
+        price) | round(4) }}
     action: input_number.set_value
-
-  # Calculate export feed-in
-  - target:
-      entity_id: input_number.amber_last_5min_feed_in
-    data:
-      value: >
-        {% set current = states('sensor.solar_return_kwh') | float(0) %}
-        {% set previous = states('input_number.solar_return_previous') | float(0) %}
-        {% set energy_kwh = [current - previous, 0] | max %}
-        {% set price = states('sensor.home_feed_in_price') | float(0) %}
-        {{ (energy_kwh * price) | round(4) }}
-    action: input_number.set_value
-
-  # Accumulate import cost
   - target:
       entity_id: input_number.amber_daily_cost_cumulative
     data:
       value: >
         {% set last = states('input_number.amber_last_5min_cost') | float(0) %}
-        {% set total = states('input_number.amber_daily_cost_cumulative') | float(0) %}
-        {{ (total + last) | round(4) }}
+        {% set total = states('input_number.amber_daily_cost_cumulative') |
+        float(0) %} {{ (total + last) | round(4) }}
     action: input_number.set_value
-
-  # Accumulate export feed-in
-  - target:
-      entity_id: input_number.amber_daily_feed_in_cumulative
-    data:
-      value: >
-        {% set last = states('input_number.amber_last_5min_feed_in') | float(0) %}
-        {% set total = states('input_number.amber_daily_feed_in_cumulative') | float(0) %}
-        {{ (total + last) | round(4) }}
-    action: input_number.set_value
-
-  # Store previous energy values for next cycle
   - target:
       entity_id: input_number.grid_energy_previous
     data:
       value: "{{ states('sensor.house_total_energy') | float(0) }}"
+    action: input_number.set_value
+mode: single
+```
+
+### Main Cost Tracker (Export)
+
+```yaml
+alias: Amber 5-Minute Feed-in Tracker
+description: ""
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.home_feed_in_price
+conditions: []
+actions:
+  - wait_for_trigger:
+      - trigger: state
+        entity_id:
+          - sensor.home_feed_in_price
+        attribute: estimate
+        to:
+          - "false"
+        from:
+          - "true"
+    timeout:
+      hours: 0
+      minutes: 0
+      seconds: 30
+      milliseconds: 0
+    continue_on_timeout: true
+  - target:
+      entity_id: input_number.amber_last_5min_feed_in
+    data:
+      value: >
+        {% set current = states('sensor.solar_return_kwh') | float(0) %} {% set
+        previous = states('input_number.solar_return_previous') | float(0) %} {%
+        set energy_kwh = [current - previous, 0] | max %} {% set price =
+        states('sensor.home_feed_in_price') | float(0) %} {{ (energy_kwh *
+        price) | round(4) }}
+    action: input_number.set_value
+  - target:
+      entity_id: input_number.amber_daily_feed_in_cumulative
+    data:
+      value: >
+        {% set last = states('input_number.amber_last_5min_feed_in') | float(0)
+        %} {% set total = states('input_number.amber_daily_feed_in_cumulative')
+        | float(0) %} {{ (total + last) | round(4) }}
     action: input_number.set_value
   - target:
       entity_id: input_number.solar_return_previous
@@ -95,6 +114,7 @@ actions:
     action: input_number.set_value
 mode: single
 ```
+
 
 ### Daily Reset
 
@@ -115,16 +135,6 @@ actions:
       entity_id: input_number.amber_daily_feed_in_cumulative
     data:
       value: 0
-    action: input_number.set_value
-  - target:
-      entity_id: input_number.grid_energy_previous
-    data:
-      value: "{{ states('sensor.house_total_energy') | float(0) }}"
-    action: input_number.set_value
-  - target:
-      entity_id: input_number.solar_return_previous
-    data:
-      value: "{{ states('sensor.solar_return_kwh') | float(0) }}"
     action: input_number.set_value
 mode: single
 ```
