@@ -2,9 +2,7 @@
 
 | Type | Entity ID | Description |
 |------|-----------|-------------|
-| Power (import) | `sensor.grid_consumption` | Real-time power draw from grid |
 | Energy (import) | `sensor.house_total_energy` | Cumulative energy imported from grid |
-| Power (export) | `sensor.return` | Real-time power returned to grid |
 | Energy (export) | `sensor.solar_return_kwh` | Cumulative energy exported to grid |
 
 ## Existing Amber Pricing Sensors
@@ -16,10 +14,8 @@
 
 ## Notes
 
-- `sensor.grid_consumption` and `sensor.return` are **power** sensors (instantaneous, typically in W or kW)
 - `sensor.house_total_energy` and `sensor.solar_return_kwh` are **energy** sensors (cumulative, in kWh)
 - The energy sensors are used in the automations because they accumulate over time and provide the deltas needed for cost calculation
-- The power sensors are not directly used in the cost tracking automations, but may be useful for real-time monitoring dashboards
 
 ## Input Helpers
 
@@ -162,7 +158,7 @@ actions:
 mode: single
 ```
 
-## Optional: Net Daily Cost Template Sensor
+## Net Daily Cost Template Sensor
 
 ```yaml
 template:
