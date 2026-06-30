@@ -60,11 +60,9 @@ actions:
       entity_id: input_number.amber_last_5min_cost
     data:
       value: >
-        {% set current = states('sensor.house_total_energy') | float(0) %} {%
-        set previous = states('input_number.grid_energy_previous') | float(0) %}
-        {% set energy_kwh = [current - previous, 0] | max %} {% set price =
-        states('sensor.home_general_price') | float(0) %} {{ (energy_kwh *
-        price) | round(4) }}
+        {% set current = states('sensor.house_total_energy') | float(0) %}
+        {% set previous = states('input_number.grid_energy_previous') | float(0) %}
+        {% set energy_kwh = [current - previous, 0] | max %} {% set price = states('sensor.home_general_price') | float(0) %} {{ (energy_kwh * price) | round(4) }}
     action: input_number.set_value
   - target:
       entity_id: input_number.amber_daily_cost_cumulative
