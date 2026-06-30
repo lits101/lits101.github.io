@@ -1,0 +1,148 @@
+# Amber Electric Demand Charge Tracking — Home Assistant Documentation
+
+## 1. Purpose
+
+This setup tracks your **monthly peak demand** during Amber Electric’s demand window (16:00–21:00) and estimates the resulting **monthly demand charge**. It uses a rolling 30-minute energy statistic, captures the highest half-hourly kWh value seen in the window, converts that to kW, and applies the demand charge rate.
+
+---
+
+## 2. How It Works
+
+1. **Demand window**: Only 16:00–21:00 is considered.
+2. **Rolling energy**: `sensor.house_energy_30_minutes_rolling` continuously reports the 50th-percentile house energy over the last 30 minutes.
+3. **Peak capture**: Every time the rolling value updates, if it is higher than the stored monthly peak, it is saved to `input_number.monthly_peak_demand_kwh`.
+4. **kW conversion**: The 30-minute peak kWh is converted to kW by multiplying by 2 (because 30 min = 0.5 h → kW = kWh ÷ 0.5 = kWh × 2).
+5. **Charge calculation**: The monthly demand charge is `peak kW × $7`.
+6. **Monthly reset**: At midnight on the 1st of each month, the stored peak is reset to `0`.
+
+---
+
+## 3. Entities
+
+| Entity | Type | Purpose |
+|---|---|---|
+| `sensor.house_total_energy` | Pre-existing sensor | All-time house energy in kWh (source data). |
+| `sensor.house_energy_30_minutes_rolling` | Statistics sensor | 30-minute rolling 50th-percentile energy in kWh. |
+| `sensor.house_energy_demand_window` | Template sensor | House energy restricted to the 16:00–21:00 window. *(Auxiliary; may be named `sensor.garage_solaredge_i1_house_energy_demand_window`.)* |
+| `sensor.current_demand` | Template sensor | Current 30-minute rolling demand, but only non-zero during 16:00–21:00. |
+| `input_number.monthly_peak_demand_kwh` | Input number | Highest 30-minute kWh value observed this month. |
+| `sensor.monthly_peak_demand_kw` | Template sensor | Converted peak demand in kW. |
+| `sensor.monthly_demand_charge` | Template sensor | Estimated monthly demand charge in dollars. |
+
+---
+
+## 4. Sensor Configuration
+
+### `sensor.house_energy_30_minutes_rolling`
+Statistics sensor:
+
+- **Sampling size**: 1000
+- **Max age**: 30 minutes
+- **Percentile**: 50
+- **Precision**: 2
+
+### `sensor.house_energy_demand_window`
+```yaml
+{{ states('sensor.house_total_energy') | float(0)
+   if now().hour >= 16 and now().hour < 21
+   else 0 }}
+```
+
+### `sensor.current_demand`
+```yaml
+{% if now().hour >= 16 and now().hour < 21 %}
+  {{ states('sensor.house_energy_30_minutes_rolling') | float(0) }}
+{% else %}
+  0
+{% endif %}
+```
+
+### `input_number.monthly_peak_demand_kwh`
+- **Min**: 0
+- **Max**: 100
+- **Step**: 0.001
+- **Mode**: input box
+- **Unit**: kWh
+
+### `sensor.monthly_peak_demand_kw`
+```yaml
+{{ states('input_number.monthly_peak_demand_kwh') | float(0) * 2 }}
+```
+
+### `sensor.monthly_demand_charge`
+```yaml
+{{ (states('sensor.monthly_peak_demand_kw') | float(0) * 7) | round(2) }}
+```
+
+---
+
+## 5. Automation Configuration
+
+### Update Demand Peak
+Captures the highest 30-minute rolling energy value seen during the demand window.
+
+```yaml
+alias: Update Demand Peak
+description: ""
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.house_energy_30_minutes_rolling
+conditions:
+  - condition: time
+    after: "16:00:00"
+    before: "21:00:00"
+actions:
+  - if:
+      - condition: template
+        value_template: |
+          {{ states('sensor.house_energy_30_minutes_rolling') | float(0) > 
+             states('input_number.monthly_peak_demand_kwh') | float(0) }}
+    then:
+      - target:
+          entity_id: input_number.monthly_peak_demand_kwh
+        data:
+          value: "{{ states('sensor.house_energy_30_minutes_rolling') | float(0) }}"
+        action: input_number.set_value
+mode: single
+```
+
+### Reset Usage & Peak Demand Counter
+Resets the stored monthly peak demand at midnight on the 1st of each month.
+
+```yaml
+alias: Reset Usage & Peak Demand Counter
+description: ""
+triggers:
+  - at: "00:00:00"
+    trigger: time
+conditions:
+  - condition: template
+    value_template: "{{ now().day == 1 }}"
+actions:
+  - target:
+      entity_id: input_number.monthly_peak_demand_kwh
+    data:
+      value: 0
+    action: input_number.set_value
+mode: single
+```
+
+---
+
+## 6. Calculation Walkthrough
+
+| Step | Formula | Example |
+|---|---|---|
+| 30-minute peak energy | Stored in `input_number.monthly_peak_demand_kwh` | 3.500 kWh |
+| Convert to kW | `kWh × 2` | 3.500 × 2 = **7.00 kW** |
+| Demand charge | `kW × $7` | 7.00 × 7 = **$49.00** |
+
+---
+
+## 7. Notes & Assumptions
+
+- The demand window is hardcoded as **16:00–21:00**. Update the time conditions in both the template sensors and the automation if your tariff window differs.
+- The `$7` multiplier in `sensor.monthly_demand_charge` should match your Amber Electric plan’s demand charge rate.
+- `sensor.house_energy_demand_window` is defined but is **not used** by the peak-capture automation. It can be used for dashboards/debugging or safely removed.
+- The 30-minute rolling statistic is the core input; `sensor.current_demand` is a convenience display sensor that zeroes outside the demand window.
